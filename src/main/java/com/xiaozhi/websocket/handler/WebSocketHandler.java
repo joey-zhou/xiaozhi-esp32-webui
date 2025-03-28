@@ -174,30 +174,10 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     LISTENING_STATE.put(sessionId, false);
                     messageService.sendMessage(session, "stt", "start", result);
                     // 使用句子切分处理流式响应
-                    llmManager.chatStreamBySentence(device, result, (sentence, status) -> {
+                    llmManager.chatStreamBySentence(device, result, (sentence, isStart, isEnd) -> {
                         try {
-                            String audioPath;
-                            // 根据状态处理不同情况
-                            switch (status) {
-                                case "start":
-                                    // 第一句话，生成语音并发送
-                                    audioPath = textToSpeechService.textToSpeech(sentence);
-                                    audioService.sendAudio(session, audioPath, sentence, true, false);
-                                    break;
-                                case "middle":
-                                    // 中间句子，生成语音并发送
-                                    audioPath = textToSpeechService.textToSpeech(sentence);
-                                    audioService.sendAudio(session, audioPath, sentence, false, false);
-                                    break;
-
-                                case "end":
-                                    if (!sentence.isEmpty()) {
-                                        // 最后一句话，生成语音并发送
-                                        audioPath = textToSpeechService.textToSpeech(sentence);
-                                        audioService.sendAudio(session, audioPath, sentence, false, true);
-                                    }
-                                    break;
-                            }
+                            String audioPath = textToSpeechService.textToSpeech(sentence);
+                            audioService.sendAudio(session, audioPath, sentence, isStart, isEnd);
                         } catch (Exception e) {
                             logger.error("处理句子失败: {}", e.getMessage(), e);
                         }
@@ -297,30 +277,10 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 LISTENING_STATE.put(sessionId, false);
                 messageService.sendMessage(session, "stt", "start", text);
                 // 使用句子切分处理流式响应
-                llmManager.chatStreamBySentence(device, text, (sentence, status) -> {
+                llmManager.chatStreamBySentence(device, text, (sentence, isStart, isEnd) -> {
                     try {
-                        String audioPath;
-                        // 根据状态处理不同情况
-                        switch (status) {
-                            case "start":
-                                // 第一句话，生成语音并发送
-                                audioPath = textToSpeechService.textToSpeech(sentence);
-                                audioService.sendAudio(session, audioPath, sentence, true, false);
-                                break;
-                            case "middle":
-                                // 中间句子，生成语音并发送
-                                audioPath = textToSpeechService.textToSpeech(sentence);
-                                audioService.sendAudio(session, audioPath, sentence, false, false);
-                                break;
-
-                            case "end":
-                                if (!sentence.isEmpty()) {
-                                    // 最后一句话，生成语音并发送
-                                    audioPath = textToSpeechService.textToSpeech(sentence);
-                                    audioService.sendAudio(session, audioPath, sentence, false, true);
-                                }
-                                break;
-                        }
+                        String audioPath = textToSpeechService.textToSpeech(sentence);
+                        audioService.sendAudio(session, audioPath, sentence, isStart, isEnd);
                     } catch (Exception e) {
                         logger.error("处理句子失败: {}", e.getMessage(), e);
                     }

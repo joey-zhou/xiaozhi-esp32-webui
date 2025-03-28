@@ -3,6 +3,8 @@ package com.xiaozhi.websocket.llm.factory;
 import com.xiaozhi.websocket.llm.api.LlmService;
 import com.xiaozhi.websocket.llm.providers.ollama.OllamaService;
 import com.xiaozhi.websocket.llm.providers.openai.OpenAiService;
+import com.xiaozhi.websocket.llm.providers.qwen.QwenService;
+import com.xiaozhi.websocket.llm.providers.spark.SparkService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,18 +24,22 @@ public class LlmServiceFactory {
      * @param model 模型名称
      * @return LLM服务
      */
-    public static LlmService createLlmService(String provider, String endpoint, String apiKey, String model) {
+    public static LlmService createLlmService(String provider, String endpoint, String appId, String apiKey, String apiSecret, String model) {
         provider = provider.toLowerCase();
         
         switch (provider) {
             case "openai":
-                return new OpenAiService(endpoint, apiKey, model);
+                return new OpenAiService(endpoint, appId, apiKey, apiSecret, model);
             case "ollama":
-                return new OllamaService(endpoint, apiKey, model);
+                return new OllamaService(endpoint, appId, apiKey, apiSecret, model);
+            case "qwen":
+                return new QwenService(endpoint, appId, apiKey, apiSecret, model);
+            case "spark":
+                return new SparkService(endpoint, appId, apiKey, apiSecret, model);
             // 可以添加更多提供商的支持
             default:
                 logger.info("未找到匹配的模型提供商 '{}', 默认使用Ollama", provider);
-                return new OllamaService(endpoint, apiKey, model);
+                return new OllamaService(endpoint, appId, apiKey, apiSecret, model);
         }
     }
 }

@@ -1,4 +1,4 @@
-package com.xiaozhi.websocket.llm.providers.ollama;
+package com.xiaozhi.websocket.llm.providers.qwen;
 
 import com.xiaozhi.websocket.llm.api.AbstractLlmService;
 import com.xiaozhi.websocket.llm.api.StreamResponseListener;
@@ -11,9 +11,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Ollama LLM服务实现
+ * 阿里云通义千问 LLM服务实现
  */
-public class OllamaService extends AbstractLlmService {
+public class QwenService extends AbstractLlmService {
 
     /**
      * 构造函数
@@ -22,7 +22,7 @@ public class OllamaService extends AbstractLlmService {
      * @param apiKey   API密钥
      * @param model    模型名称
      */
-    public OllamaService(String endpoint, String appId, String apiKey, String apiSecret, String model) {
+    public QwenService(String endpoint, String appId, String apiKey, String apiSecret, String model) {
         super(endpoint, appId, apiKey, apiSecret, model);
     }
 
@@ -38,8 +38,10 @@ public class OllamaService extends AbstractLlmService {
 
         // 构建请求
         Request request = new Request.Builder()
-                .url(endpoint + "/api/chat")
+                .url(endpoint)
                 .post(RequestBody.create(jsonBody, JSON))
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type", "application/json")
                 .build();
 
         // 发送请求
@@ -51,12 +53,13 @@ public class OllamaService extends AbstractLlmService {
             String responseBody = response.body().string();
             Map<String, Object> responseMap = objectMapper.readValue(responseBody, Map.class);
 
-            Map<String, Object> message = (Map<String, Object>) responseMap.get("message");
-            if (message != null) {
-                return (String) message.get("content");
+            // 通义千问API响应格式解析
+            Map<String, Object> output = (Map<String, Object>) responseMap.get("output");
+            if (output != null && output.containsKey("text")) {
+                return (String) output.get("text");
             }
 
-            throw new IOException("无法解析Ollama响应");
+            throw new IOException("无法解析通义千问响应");
         }
     }
 
@@ -66,16 +69,18 @@ public class OllamaService extends AbstractLlmService {
         // 构建请求体
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", model);
-        requestBody.put("stream", true);
         requestBody.put("messages", messages);
+        requestBody.put("stream", true);
 
         // 转换为JSON
         String jsonBody = objectMapper.writeValueAsString(requestBody);
 
         // 构建请求
         Request request = new Request.Builder()
-                .url(endpoint + "/api/chat")
+                .url(endpoint + "/chat/completions")
                 .post(RequestBody.create(jsonBody, JSON))
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type", "application/json")
                 .build();
 
         // 通知开始
@@ -105,7 +110,6 @@ public class OllamaService extends AbstractLlmService {
                         streamListener.onError(new IOException(errorMsg));
                         return;
                     }
-
                     BufferedSource source = responseBody.source();
                     StringBuilder fullResponse = new StringBuilder();
 
@@ -114,24 +118,39 @@ public class OllamaService extends AbstractLlmService {
                         if (line == null) {
                             break;
                         }
-                        if (line.isEmpty()) {
+                        if (line.isEmpty() || line.equals("data: [DONE]")) {
                             continue;
                         }
-                        try {
-                            Map<String, Object> data = objectMapper.readValue(line, Map.class);
-                            if (data.containsKey("message")) {
-                                Map<String, Object> message = (Map<String, Object>) data.get("message");
-                                if (message != null && message.containsKey("content")) {
-                                    String content = (String) message.get("content");
-                                    if (content != null && !content.isEmpty()) {
-                                        streamListener.onToken(content);
-                                        fullResponse.append(content);
+                        if (line.startsWith("data: ")) {
+                            String jsonData = line.substring(6);
+                            try {
+                                Map<String, Object> data = objectMapper.readValue(jsonData, Map.class);
+                                List<Map<String, Object>> choices = (List<Map<String, Object>>) data.get("choices");
+                                
+                                if (choices != null && !choices.isEmpty()) {
+                                    Map<String, Object> choice = choices.get(0);
+                                    Map<String, Object> delta = (Map<String, Object>) choice.get("delta");
+                                    
+                                    if (delta != null && delta.containsKey("content")) {
+                                        String content = (String) delta.get("content");
+                                        if (content != null && !content.isEmpty()) {
+                                            streamListener.onToken(content);
+                                            fullResponse.append(content);
+                                        }
+                                    }
+                                    
+                                    // 检查是否完成
+                                    String finishReason = (String) choice.get("finish_reason");
+                                    if ("stop".equals(finishReason)) {
+                                        // 通知完成
+                                        streamListener.onComplete(fullResponse.toString());
+                                        return;
                                     }
                                 }
+                            } catch (Exception e) {
+                                logger.error("解析流式响应失败: {}", e.getMessage(), e);
+                                streamListener.onError(e);
                             }
-                        } catch (Exception e) {
-                            logger.error("解析流式响应失败: {}", e.getMessage(), e);
-                            streamListener.onError(e);
                         }
                     }
 
@@ -144,6 +163,6 @@ public class OllamaService extends AbstractLlmService {
 
     @Override
     public String getProviderName() {
-        return "ollama";
+        return "qwen";
     }
 }

@@ -179,8 +179,6 @@ export default {
               { name: 'apiUrl', label: 'API URL', required: false, span: 12 }
             ],
             spark: [
-              { name: 'appId', label: 'App ID', required: true, span: 8 },
-              { name: 'apiKey', label: 'API Key', required: true, span: 8 },
               { name: 'apiSecret', label: 'API Secret', required: true, span: 8 },
               { name: 'apiUrl', label: 'API URL', required: false, span: 12 }
             ]

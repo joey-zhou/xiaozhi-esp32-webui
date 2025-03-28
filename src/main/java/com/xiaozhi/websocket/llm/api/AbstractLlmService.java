@@ -40,6 +40,8 @@ public abstract class AbstractLlmService implements LlmService {
     protected final String endpoint;
     protected final String apiKey;
     protected final String model;
+    protected final String appId;
+    protected final String apiSecret;
 
     /**
      * 构造函数
@@ -48,10 +50,13 @@ public abstract class AbstractLlmService implements LlmService {
      * @param apiKey   API密钥
      * @param model    模型名称
      */
-    public AbstractLlmService(String endpoint, String apiKey, String model) {
+    public AbstractLlmService(String endpoint, String appId, String apiKey, String apiSecret, String model) {
         this.endpoint = endpoint;
+        this.appId = appId;
+        this.apiSecret = apiSecret;
         this.apiKey = apiKey;
         this.model = model;
+
     }
 
     /**

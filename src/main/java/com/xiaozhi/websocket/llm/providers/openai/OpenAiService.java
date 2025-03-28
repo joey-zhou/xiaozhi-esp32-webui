@@ -22,8 +22,8 @@ public class OpenAiService extends AbstractLlmService {
      * @param apiKey   API密钥
      * @param model    模型名称
      */
-    public OpenAiService(String endpoint, String apiKey, String model) {
-        super(endpoint, apiKey, model);
+    public OpenAiService(String endpoint, String appId, String apiKey, String apiSecret, String model) {
+        super(endpoint, appId, apiKey, apiSecret, model);
     }
 
     @Override
@@ -38,7 +38,7 @@ public class OpenAiService extends AbstractLlmService {
 
         // 构建请求
         Request request = new Request.Builder()
-                .url(endpoint + "/v1/chat/completions")
+                .url(endpoint + "/chat/completions")
                 .post(RequestBody.create(jsonBody, JSON))
                 .addHeader("Authorization", "Bearer " + apiKey)
                 .build();
@@ -78,7 +78,7 @@ public class OpenAiService extends AbstractLlmService {
 
         // 构建请求
         Request request = new Request.Builder()
-                .url(endpoint + "/v1/chat/completions")
+                .url(endpoint + "/chat/completions")
                 .post(RequestBody.create(jsonBody, JSON))
                 .addHeader("Authorization", "Bearer " + apiKey)
                 .build();

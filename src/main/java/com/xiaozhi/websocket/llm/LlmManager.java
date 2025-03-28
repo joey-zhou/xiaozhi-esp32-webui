@@ -8,6 +8,8 @@ import com.xiaozhi.websocket.llm.api.StreamResponseListener;
 import com.xiaozhi.websocket.llm.factory.LlmServiceFactory;
 import com.xiaozhi.websocket.llm.memory.ChatMemory;
 import com.xiaozhi.websocket.llm.memory.ModelContext;
+
+import org.apache.logging.log4j.util.TriConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -154,16 +156,15 @@ public class LlmManager {
     }
 
     /**
-     * 处理用户查询（流式方式，使用句子切分）
+     * 处理用户查询（流式方式，使用句子切分，带有开始和结束标志）
      * 
      * @param device          设备信息
      * @param message         用户消息
-     * @param sentenceHandler 句子处理函数，接收句子内容和状态（start, middle, end）
+     * @param sentenceHandler 句子处理函数，接收句子内容、是否是开始句子、是否是结束句子
      */
     public void chatStreamBySentence(SysDevice device, String message,
-            BiConsumer<String, String> sentenceHandler) {
+            TriConsumer<String, Boolean, Boolean> sentenceHandler) {
         try {
-
             final StringBuilder currentSentence = new StringBuilder();
             final AtomicInteger sentenceCount = new AtomicInteger(0);
             final StringBuilder fullResponse = new StringBuilder();
@@ -186,8 +187,9 @@ public class LlmManager {
                     String pending = pendingSentence.get();
                     if (pending != null) {
                         // 有待处理的句子，发送它
-                        String state = sentenceCount.get() == 0 ? "start" : "middle";
-                        sentenceHandler.accept(pending, state);
+                        boolean isStart = sentenceCount.get() == 0;
+                        boolean isEnd = false; // 中间句子不是结束
+                        sentenceHandler.accept(pending, isStart, isEnd);
                         sentenceCount.incrementAndGet();
                         pendingSentence.set(null);
                     }
@@ -212,18 +214,13 @@ public class LlmManager {
 
                 @Override
                 public void onComplete(String completeResponse) {
-
                     // 处理待发送的句子（如果有）
                     String pending = pendingSentence.getAndSet(null);
                     if (pending != null) {
-                        // 如果这是第一个句子，标记为start，否则如果是最后一个，标记为end
-                        String state;
-                        if (sentenceCount.get() == 0) {
-                            state = "start"; // 这是唯一的句子
-                        } else {
-                            state = "end"; // 这是最后一个句子
-                        }
-                        sentenceHandler.accept(pending, state);
+                        // 如果这是第一个句子，isStart=true，如果是最后一个，isEnd=true
+                        boolean isStart = sentenceCount.get() == 0;
+                        boolean isEnd = true; // 最后一个待处理句子是结束
+                        sentenceHandler.accept(pending, isStart, isEnd);
                         sentenceCount.incrementAndGet();
                     }
 
@@ -232,15 +229,16 @@ public class LlmManager {
                         String sentence = currentSentence.toString().trim();
 
                         // 确定句子状态
-                        String state;
-                        if (sentenceCount.get() == 0) {
-                            state = "start"; // 这是唯一的句子
-                        } else {
-                            state = "end"; // 这是最后一个句子
-                        }
+                        boolean isStart = sentenceCount.get() == 0;
+                        boolean isEnd = true; // 最后一个句子是结束
 
-                        sentenceHandler.accept(sentence, state);
+                        sentenceHandler.accept(sentence, isStart, isEnd);
                         sentenceCount.incrementAndGet();
+                    }
+                    
+                    // 如果没有任何句子被处理，发送一个空的结束标记
+                    if (sentenceCount.get() == 0) {
+                        sentenceHandler.accept("", true, true);
                     }
                 }
 
@@ -248,7 +246,7 @@ public class LlmManager {
                 public void onError(Throwable e) {
                     logger.error("流式响应出错: {}", e.getMessage(), e);
                     // 发送错误信号
-                    sentenceHandler.accept("抱歉，我在处理您的请求时遇到了问题。", "error");
+                    sentenceHandler.accept("抱歉，我在处理您的请求时遇到了问题。", true, true);
                 }
             };
 
@@ -258,7 +256,7 @@ public class LlmManager {
         } catch (Exception e) {
             logger.error("处理流式查询时出错: {}", e.getMessage(), e);
             // 发送错误信号
-            sentenceHandler.accept("抱歉，我在处理您的请求时遇到了问题。", "error");
+            sentenceHandler.accept("抱歉，我在处理您的请求时遇到了问题。", true, true);
         }
     }
 
@@ -301,8 +299,10 @@ public class LlmManager {
         String model = config.getConfigName();
         String endpoint = config.getApiUrl();
         String apiKey = config.getApiKey();
+        String appId = config.getAppId();
+        String apiSecret = config.getApiSecret();
 
-        return LlmServiceFactory.createLlmService(provider, endpoint, apiKey, model);
+        return LlmServiceFactory.createLlmService(provider, endpoint, appId, apiKey, apiSecret, model);
     }
 
     /**
@@ -317,9 +317,9 @@ public class LlmManager {
     }
 
     /**
-     * 双参数消费者接口
+     * 三参数消费者接口
      */
-    public interface BiConsumer<T, U> {
-        void accept(T t, U u);
+    public interface TriConsumer<T, U, V> {
+        void accept(T t, U u, V v);
     }
 }
