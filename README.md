@@ -82,6 +82,29 @@ Server端采用 Spring Boot 框架，前端采用 Vue.js 框架，全局响应�
 
 烧录成功且联网成功后，通过唤醒词唤醒小智，留意server端输出的控制台信息。
 
+### 3. Docker部署
+如果自己构建Docker镜像，需要注意的是目前使用了docker官网的基础镜像，在国内可能会拉取镜像失败，请自行调整。
+### 3.1 构建参数
+- **VOSK_MODEL**: 用于指定使用哪个语音识别模型，比如 vosk-model-cn-0.22, 示例:
+```bash
+docker build -t xiaozhi-server --build-arg VOSK_MODEL=vosk-model-cn-0.22 .
+```
+
+### 3.2 运行参数
+- **DB_HOST**: 数据库服务器
+- **DB_USER**: 数据库用户名
+- **DB_PASSWORD**: 数据库密码
+- **DB_NAME**: 数据库名
+
+端口号：
+- **8084**: 前端服务端口
+- **8091**: 后端服务端口
+
+使用例子:
+```bash
+docker run -d --name xiaozhi-server -p 8084:8084 -p 8091:8091 -e DB_HOST=10.85.22.2 xiaozhi-server
+```
+
 ---
 
 ## 贡献指南
