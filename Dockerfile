@@ -4,7 +4,7 @@ WORKDIR /app
 COPY . .
 RUN sed -i "s@http://.*archive.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list && \
     sed -i "s@http://.*security.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list && \
-    apt-get update && apt-get install -y curl unzip && \
+    apt-get update && apt-get install -yq curl unzip nodejs npm && \
     curl -sLO https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz && \
     tar -xzf apache-maven-3.9.9-bin.tar.gz && \
     rm apache-maven-3.9.9-bin.tar.gz && \
@@ -18,23 +18,20 @@ RUN curl -O https://alphacephei.com/vosk/models/${VOSK_MODEL}.zip && \
     mv ${VOSK_MODEL} models/vosk-model
 
 RUN mvn clean package -DskipTests
-
-FROM node:lts-bullseye AS web
 WORKDIR /app/web
-COPY web .
-RUN npm install && npm run build
+RUN npm install && npm run build 
 
 FROM eclipse-temurin:8u442-b06-jdk-jammy
 
 RUN sed -i "s@http://.*archive.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list && \
     sed -i "s@http://.*security.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get update && \
-    apt-get install -y ffmpeg nodejs
+    apt-get install -yq ffmpeg nodejs npm
 WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
 COPY --from=builder /app/models /app/models
-COPY --from=web /app/web /app/web
+# COPY --from=web /app/web /app/web
+COPY --from=builder /app/web /app/web
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x entrypoint.sh
 VOLUME [ "/app/audio" ]
