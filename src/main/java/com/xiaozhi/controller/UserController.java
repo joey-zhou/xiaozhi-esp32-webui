@@ -14,6 +14,7 @@ import com.xiaozhi.service.SysUserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.ObjectUtils;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -99,11 +100,11 @@ public class UserController {
             if (ObjectUtils.isEmpty(userQuery)) {
                 return AjaxResult.error("无此用户，操作失败");
             }
-            if (!ObjectUtils.isEmpty(user.getPassword())) {
+            if (!StringUtils.hasText(user.getPassword())) {
                 String newPassword = authenticationService.encryptPassword(user.getPassword());
                 user.setPassword(newPassword);
             }
-            // if (ObjectUtils.isEmpty(userQuery.getAvatar())) {
+            // if (StringUtils.hasText(userQuery.getAvatar())) {
             // user.setAvatar(ImageUtils.GenerateImg(userQuery.getName()));
             // }
             if (0 < userService.update(user)) {

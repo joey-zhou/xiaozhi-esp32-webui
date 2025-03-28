@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.annotation.Resource;
@@ -42,9 +43,6 @@ public class AudioService {
 
     // 跟踪每个会话的发送状态
     private final Map<String, AtomicBoolean> isProcessingMap = new ConcurrentHashMap<>();
-
-    // 跟踪每个会话的中断状态
-    private final Map<String, AtomicBoolean> interruptSendingMap = new ConcurrentHashMap<>();
 
     @Resource
     private MessageService messageService;
@@ -122,9 +120,8 @@ public class AudioService {
     public void initializeSession(String sessionId) {
         vadDetector.initializeSession(sessionId);
         // 初始化音频队列和处理状态
-        audioQueues.putIfAbsent(sessionId, new ConcurrentLinkedQueue<>());
+        audioQueues.putIfAbsent(sessionId, new LinkedBlockingQueue<>());
         isProcessingMap.putIfAbsent(sessionId, new AtomicBoolean(false));
-        interruptSendingMap.putIfAbsent(sessionId, new AtomicBoolean(false));
     }
 
     /**
@@ -164,11 +161,6 @@ public class AudioService {
         AtomicBoolean isProcessing = isProcessingMap.get(sessionId);
         if (isProcessing != null) {
             isProcessing.set(false);
-        }
-        // 重置中断标志
-        AtomicBoolean interruptFlag = interruptSendingMap.get(sessionId);
-        if (interruptFlag != null) {
-            interruptFlag.set(false);
         }
     }
 
@@ -264,7 +256,6 @@ public class AudioService {
             boolean isLastText) throws Exception {
 
         if (session == null || !session.isOpen()) {
-            logger.warn("尝试发送音频到已关闭或空的WebSocket会话");
             return;
         }
 
@@ -289,7 +280,10 @@ public class AudioService {
 
                 // 添加到发送队列
                 audioQueues.get(sessionId).add(task);
-
+                // 发送开始信号和句子开始信号
+                if (isFirstText) {
+                    sendStart(session);
+                }
                 // 如果当前没有处理任务，开始处理
                 if (isProcessingMap.get(sessionId).compareAndSet(false, true)) {
                     processNextAudio(session);
@@ -314,18 +308,9 @@ public class AudioService {
 
         // 检查队列是否为空
         ProcessedAudioTask task = queue.poll();
+
         if (task == null) {
             // 队列为空，设置处理状态为false
-            isProcessingMap.get(sessionId).set(false);
-            return;
-        }
-
-        // 获取中断标志
-        AtomicBoolean interruptFlag = interruptSendingMap.get(sessionId);
-
-        // 如果已设置中断标志，则不处理此任务，直接重置处理状态
-        if (interruptFlag != null && interruptFlag.get()) {
-            interruptFlag.set(false);
             isProcessingMap.get(sessionId).set(false);
             return;
         }
@@ -333,17 +318,7 @@ public class AudioService {
         // 异步处理音频任务
         audioSenderExecutor.submit(() -> {
             try {
-                // 检查是否已中断
-                if (interruptFlag != null && interruptFlag.get()) {
-                    interruptFlag.set(false);
-                    isProcessingMap.get(sessionId).set(false);
-                    return;
-                }
 
-                // 发送开始信号和句子开始信号
-                if (task.isFirstText()) {
-                    sendStart(session);
-                }
                 sendSentenceStart(session, task.getText());
 
                 // 获取已处理的Opus帧
@@ -354,12 +329,6 @@ public class AudioService {
                 long playPosition = 0;
 
                 for (int i = 0; i < opusFrames.size(); i++) {
-                    // 检查是否已中断
-                    if (interruptFlag != null && interruptFlag.get()) {
-                        interruptFlag.set(false);
-                        isProcessingMap.get(sessionId).set(false);
-                        return;
-                    }
 
                     byte[] frame = opusFrames.get(i);
 
@@ -476,12 +445,6 @@ public class AudioService {
 
         // 发送停止指令
         messageService.sendMessage(session, "tts", "stop");
-
-        // 设置中断标志
-        AtomicBoolean interruptFlag = interruptSendingMap.get(sessionId);
-        if (interruptFlag != null) {
-            interruptFlag.set(true);
-        }
 
         // 清空音频队列
         Queue<ProcessedAudioTask> queue = audioQueues.get(sessionId);

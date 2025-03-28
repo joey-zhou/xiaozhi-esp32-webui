@@ -37,4 +37,13 @@
         )
     </insert>
 
+    <select id="selectRoleById" resultType="com.xiaozhi.entity.SysRole">
+        SELECT
+        <include refid="roleSql"></include>
+        FROM
+            sys_role
+        WHERE
+            roleId = #{roleId}
+    </select>
+
 </mapper>

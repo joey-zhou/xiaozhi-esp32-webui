@@ -5,6 +5,13 @@
       "name": "ApplicationTest",
       "request": "launch",
       "mainClass": "com.xiaozhi.ApplicationTest",
+      "projectName": "xiaozhi.server"
+    },
+    {
+      "type": "java",
+      "name": "ApplicationTest",
+      "request": "launch",
+      "mainClass": "com.xiaozhi.ApplicationTest",
       "projectName": "xiaozhi.webui"
     },
     {

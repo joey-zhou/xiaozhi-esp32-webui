@@ -36,4 +36,6 @@ public interface SysRoleService {
    */
   public int update(SysRole role);
 
+  public SysRole selectRoleById(Integer roleId);
+
 }

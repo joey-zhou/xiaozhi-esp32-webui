@@ -17,4 +17,5 @@ public interface RoleMapper {
 
   int add(SysRole role);
 
+  SysRole selectRoleById(Integer roleId);
 }

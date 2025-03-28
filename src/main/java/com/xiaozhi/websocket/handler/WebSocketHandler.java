@@ -5,8 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xiaozhi.entity.SysDevice;
 import com.xiaozhi.service.SysDeviceService;
+import com.xiaozhi.websocket.llm.LlmManager;
 import com.xiaozhi.websocket.service.AudioService;
-import com.xiaozhi.websocket.service.LlmResponseService;
+import com.xiaozhi.websocket.service.MessageService;
 import com.xiaozhi.websocket.service.SpeechToTextService;
 import com.xiaozhi.websocket.service.TextToSpeechService;
 import java.io.IOException;
@@ -14,10 +15,12 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import javax.annotation.Resource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
@@ -34,13 +37,16 @@ public class WebSocketHandler extends TextWebSocketHandler {
     private AudioService audioService;
 
     @Autowired
+    private LlmManager llmManager;
+
+    @Resource
+    private MessageService messageService;
+
+    @Autowired
     private TextToSpeechService textToSpeechService;
 
     @Autowired
     private SpeechToTextService speechToTextService;
-
-    @Autowired
-    private LlmResponseService llmResponseService;
 
     private static final Logger logger = LoggerFactory.getLogger(WebSocketHandler.class);
 
@@ -98,7 +104,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
         if (deviceResult.isEmpty()) {
             SysDevice codeResult = deviceService.generateCode(device);
             String audioFilePath;
-            if (ObjectUtils.isEmpty(codeResult.getAudioPath())) {
+            if (StringUtils.hasText(codeResult.getAudioPath())) {
                 audioFilePath = textToSpeechService.textToSpeech("请到设备管理页面添加设备，输入验证码" + codeResult.getCode());
                 codeResult.setDeviceId(device.getDeviceId());
                 codeResult.setSessionId(sessionId);
@@ -166,7 +172,36 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     logger.info("语音识别结果 - SessionId: {}, 内容: {}", sessionId, result);
                     // 设置会话为非监听状态，防止处理自己的声音
                     LISTENING_STATE.put(sessionId, false);
-                    llmResponseService.processUserInput(session, device, result);
+                    messageService.sendMessage(session, "stt", "start", result);
+                    // 使用句子切分处理流式响应
+                    llmManager.chatStreamBySentence(device, result, (sentence, status) -> {
+                        try {
+                            String audioPath;
+                            // 根据状态处理不同情况
+                            switch (status) {
+                                case "start":
+                                    // 第一句话，生成语音并发送
+                                    audioPath = textToSpeechService.textToSpeech(sentence);
+                                    audioService.sendAudio(session, audioPath, sentence, true, false);
+                                    break;
+                                case "middle":
+                                    // 中间句子，生成语音并发送
+                                    audioPath = textToSpeechService.textToSpeech(sentence);
+                                    audioService.sendAudio(session, audioPath, sentence, false, false);
+                                    break;
+
+                                case "end":
+                                    if (!sentence.isEmpty()) {
+                                        // 最后一句话，生成语音并发送
+                                        audioPath = textToSpeechService.textToSpeech(sentence);
+                                        audioService.sendAudio(session, audioPath, sentence, false, true);
+                                    }
+                                    break;
+                            }
+                        } catch (Exception e) {
+                            logger.error("处理句子失败: {}", e.getMessage(), e);
+                        }
+                    });
                 }
             }
         } catch (Exception e) {
@@ -260,7 +295,36 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 logger.info("检测到唤醒词: {}", text);
                 // 设置为非监听状态，防止处理自己的声音
                 LISTENING_STATE.put(sessionId, false);
-                llmResponseService.processUserInput(session, device, text);
+                messageService.sendMessage(session, "stt", "start", text);
+                // 使用句子切分处理流式响应
+                llmManager.chatStreamBySentence(device, text, (sentence, status) -> {
+                    try {
+                        String audioPath;
+                        // 根据状态处理不同情况
+                        switch (status) {
+                            case "start":
+                                // 第一句话，生成语音并发送
+                                audioPath = textToSpeechService.textToSpeech(sentence);
+                                audioService.sendAudio(session, audioPath, sentence, true, false);
+                                break;
+                            case "middle":
+                                // 中间句子，生成语音并发送
+                                audioPath = textToSpeechService.textToSpeech(sentence);
+                                audioService.sendAudio(session, audioPath, sentence, false, false);
+                                break;
+
+                            case "end":
+                                if (!sentence.isEmpty()) {
+                                    // 最后一句话，生成语音并发送
+                                    audioPath = textToSpeechService.textToSpeech(sentence);
+                                    audioService.sendAudio(session, audioPath, sentence, false, true);
+                                }
+                                break;
+                        }
+                    } catch (Exception e) {
+                        logger.error("处理句子失败: {}", e.getMessage(), e);
+                    }
+                });
                 break;
             default:
                 logger.warn("未知的listen状态: {}", state);
